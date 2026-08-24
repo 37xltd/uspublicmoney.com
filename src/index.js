@@ -1,9 +1,8 @@
 /**
  * US Federal Spending — precomputed projections only.
- * Does not scan R2 bulk archives on request.
  */
 const SITE = "US Federal Spending";
-const DESC = "Agency × fiscal-year contract obligations from the USAspending Award Data Archive. Independent reader; not Treasury or OMB.";
+const DESC = "Awarding-agency contract obligations from the USAspending Award Data Archive. Independent reader; not Treasury or OMB.";
 const ATTR = "Derived from USAspending.gov (U.S. Department of the Treasury, Bureau of the Fiscal Service). U.S. government work, public domain (17 U.S.C. 105). This site is not the official USAspending search and is not endorsed by Treasury or OMB.";
 
 export default {
@@ -23,22 +22,27 @@ export default {
         return assetFile(env, path === "/favicon.ico" ? "/favicon.png" : path, path === "/favicon.ico" ? "image/png" : null);
       }
       if (path === "/robots.txt") {
-        return text(`User-agent: *\nAllow: /\nDisallow: /*?\nSitemap: ${url.origin}/sitemap.xml\n`);
+        return text(`User-agent: *\nAllow: /\nDisallow: /*?\nDisallow: /reports?\nSitemap: ${url.origin}/sitemap.xml\n`);
       }
       if (path === "/sitemap.xml") return sitemap(env, request, url.origin);
       if (path === "/") return home(env, request, url);
       if (path === "/agencies") return agenciesIndex(env, request, url);
       if (path === "/recipients") return recipientsPage(env, request, url);
+      if (path === "/reports") return reportsPage(env, request, url);
       if (path === "/reports/concentration") return concentration(env, request, url);
       if (path === "/about") return about(url);
       if (path === "/methodology") return methodology(env, request, url);
       if (path === "/data-sources") return sources(env, request, url);
       const fyReport = path.match(/^\/reports\/(fy)?(\d{4})$/);
-      if (fyReport) return fyPage(env, request, url, fyReport[2]);
+      if (fyReport) {
+        return Response.redirect(new URL("/reports?fy=" + fyReport[2], url.origin).toString(), 301);
+      }
       const agFy = path.match(/^\/agencies\/([a-z0-9-]+)\/(\d{4})$/);
-      if (agFy) return agencyYear(env, request, url, agFy[1], agFy[2]);
+      if (agFy) {
+        return Response.redirect(new URL("/agencies/" + agFy[1], url.origin).toString(), 301);
+      }
       const ag = path.match(/^\/agencies\/([a-z0-9-]+)$/);
-      if (ag) return agencyPage(env, request, url, ag[1]);
+      if (ag) return agencyHub(env, request, url, ag[1]);
       return html(layout(url, { title: `Not found · ${SITE}`, desc: DESC, path, body: `<main class="wrap"><h1>Not found</h1><p>No award pages. Try <a href="/agencies">agencies</a>.</p></main>` }), 404);
     } catch (err) {
       return html(layout(url, { title: `Error · ${SITE}`, desc: DESC, path, body: `<main class="wrap"><h1>Error</h1><p>${esc(err.message)}</p></main>` }), 500);
@@ -77,29 +81,27 @@ function usd(n) {
   return sign + "$" + Math.abs(x).toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
+function pctLabel(n) {
+  if (n == null || !Number.isFinite(Number(n))) return "n/a";
+  const x = Number(n);
+  const sign = x > 0 ? "+" : "";
+  return sign + x.toFixed(1) + "%";
+}
+
 function shareBlock(canonical) {
   return `<p class="share"><span>SHARE</span> <button type="button" class="copy" data-url="${esc(canonical)}">Copy link</button> <a href="mailto:?subject=${encodeURIComponent(SITE)}&amp;body=${encodeURIComponent(canonical)}">Email</a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(canonical)}">LinkedIn</a> <a href="https://twitter.com/intent/tweet?url=${encodeURIComponent(canonical)}">X</a></p>`;
 }
 
-function filterBar(hub, fy, agency) {
-  const years = (hub.fiscal_years || []).map((y) => `<option value="${y.fy}"${String(fy) === String(y.fy) ? " selected" : ""}>FY ${y.fy}</option>`).join("");
-  const ags = (hub.agency_year_cells || []).map((c) => `<option value="${esc(c.slug)}"${c.slug === agency ? " selected" : ""}>${esc(c.agency_name)}</option>`).join("");
-  return `<form class="filters" action="/" method="get">
-    <label>Fiscal year <select name="fy"><option value="">All in sample</option>${years}</select></label>
-    <label>Agency <select name="agency"><option value="">All agencies</option>${ags}</select></label>
-    <button type="submit">Apply</button>
-  </form>
-  <p class="note">Filters are query state only (noindex). They do not create extra URLs.</p>`;
-}
-
-function coverageNote(meta) {
+function coverageNote(meta, extra) {
   meta = meta || {};
   return `<aside class="prov">
     <h2>Source, date, method</h2>
-    <p><strong>Coverage:</strong> ${esc(meta.coverage || "Sample of one archive chunk. Not full-archive totals.")}</p>
-    <p><strong>Source:</strong> ${esc(meta.source || "USAspending.gov Award Data Archive")} · file ${esc(meta.file || "")} · member ${esc(meta.member || "")} · archive date ${esc(meta.archive_date || "")}.</p>
+    <p><strong>Coverage:</strong> ${esc(meta.coverage_label || "sample")} — ${esc(meta.coverage || "Sample of one archive chunk. Not full-archive totals.")}</p>
+    <p><strong>Pull / ingest:</strong> ${esc(meta.retrieved_utc || "")} UTC. Archive dated ${esc(meta.archive_date || "")}.</p>
+    <p><strong>Source:</strong> ${esc(meta.source || "USAspending.gov Award Data Archive")} · file ${esc(meta.file || "")} · member ${esc(meta.member || "")}.</p>
     <p><strong>Method:</strong> ${esc(meta.method || "")}</p>
-    <p><strong>Rows in this projection:</strong> ${esc(String(meta.rows_parsed ?? "n/a"))} transaction rows. Units: US dollars of <code>federal_action_obligation</code>. Denominator: this sample only.</p>
+    <p><strong>Rows in this projection:</strong> ${esc(String(meta.rows_parsed ?? "n/a"))} transaction rows. Units: US dollars of <code>federal_action_obligation</code>. Denominator: this loaded set only.</p>
+    ${extra || ""}
     <p>${esc(ATTR)}</p>
   </aside>`;
 }
@@ -121,6 +123,13 @@ function barChart(rows, valueKey, labelKey, caption) {
   </figure>`;
 }
 
+function recipTable(rows, extraHead, extraCell) {
+  return `<table>
+    <thead><tr><th>Recipient</th><th>UEI / id</th><th>Obligation (observed)</th><th>Rows (observed)</th>${extraHead || ""}</tr></thead>
+    <tbody>${(rows || []).map((r) => `<tr><td>${esc(r.name)}</td><td><code>${esc(r.id)}</code></td><td>${usd(r.obligation)}</td><td>${r.action_count || r.award_count || ""}</td>${extraCell ? extraCell(r) : ""}</tr>`).join("")}</tbody>
+  </table>`;
+}
+
 async function home(env, request, url) {
   const hub = (await loadJson(env, request, "/data/hub.json")) || { meta: {}, fiscal_years: [], top_agencies: [], top_recipients: [], agency_year_cells: [] };
   const fy = (url.searchParams.get("fy") || "").trim();
@@ -132,32 +141,41 @@ async function home(env, request, url) {
   const actions = cells.reduce((s, c) => s + (c.action_count || 0), 0);
   const awards = cells.reduce((s, c) => s + (c.award_count || 0), 0);
   const filtered = Boolean(fy || agency);
+  const years = (hub.fiscal_years || []).map((y) => `<option value="${y.fy}"${String(fy) === String(y.fy) ? " selected" : ""}>FY ${y.fy}</option>`).join("");
+  const ags = (hub.agency_year_cells || []).map((c) => `<option value="${esc(c.slug)}"${c.slug === agency ? " selected" : ""}>${esc(c.agency_name)}</option>`).join("");
   const fyLine = (hub.fiscal_years || []).map((y) => `<li>FY ${y.fy}: ${usd(y.obligation)} · ${y.award_count.toLocaleString("en-US")} awards · ${y.action_count.toLocaleString("en-US")} actions (sample)</li>`).join("");
+  const change = (hub.loaded_set && hub.loaded_set.change_note) || "";
   const body = `
     <main>
       <section class="hero">
         <div class="wrap">
           <p class="kicker">United States · contract actions · sample</p>
-          <h1>Who obligated what, by awarding agency and fiscal year.</h1>
-          <p class="lede">Independent projection of USAspending Award Data Archive contracts. Not a search of every award. No per-award pages.</p>
+          <h1>Who obligated what, by awarding agency.</h1>
+          <p class="lede">Independent projection of USAspending Award Data Archive contracts. One hub URL per qualified agency. Not a search of every award. No per-award pages.</p>
           ${shareBlock(url.origin + "/")}
-          ${filterBar(hub, fy, agency)}
+          <form class="filters" action="/" method="get">
+            <label>Fiscal year <select name="fy"><option value="">All in sample</option>${years}</select></label>
+            <label>Agency <select name="agency"><option value="">All agencies</option>${ags}</select></label>
+            <button type="submit">Apply</button>
+          </form>
+          <p class="note">Filters are query state only (noindex). They do not create extra URLs.</p>
         </div>
       </section>
       <div class="wrap">
         <div class="answer">
-          <p class="kicker">Sample total in view</p>
+          <p class="kicker">Sample total in view (observed)</p>
           <p class="figure">${usd(total)}</p>
           <p>${awards.toLocaleString("en-US")} distinct awards · ${actions.toLocaleString("en-US")} transaction rows · agency HHI ${esc(String(hub.agency_hhi))} (0–10,000, calculated on this sample’s agency obligation shares).</p>
+          <p class="note">Pull date ${esc((hub.meta && hub.meta.retrieved_utc) || "")} UTC. ${esc(change)}</p>
         </div>
         ${coverageNote(hub.meta)}
         <h2>Fiscal years in this projection</h2>
         <ul>${fyLine || "<li>None</li>"}</ul>
         <h2>Top awarding agencies</h2>
-        ${barChart(hub.top_agencies || [], "obligation", "name", "Top agencies by summed federal_action_obligation in this sample")}
+        ${barChart(hub.top_agencies || [], "obligation", "name", "Top agencies by summed federal_action_obligation in this sample (observed)")}
         <table>
-          <thead><tr><th>Agency</th><th>Code</th><th>Obligation (sample)</th><th>Awards</th></tr></thead>
-          <tbody>${(hub.top_agencies || []).map((a) => `<tr><td><a href="/agencies/${esc(a.slug)}/2025">${esc(a.name)}</a></td><td>${esc(a.code)}</td><td>${usd(a.obligation)}</td><td>${(a.award_count || 0).toLocaleString("en-US")}</td></tr>`).join("")}</tbody>
+          <thead><tr><th>Agency</th><th>Code</th><th>Obligation (sample, observed)</th><th>Awards</th></tr></thead>
+          <tbody>${(hub.top_agencies || []).map((a) => `<tr><td><a href="/agencies/${esc(a.slug)}">${esc(a.name)}</a></td><td>${esc(a.code)}</td><td>${usd(a.obligation)}</td><td>${(a.award_count || 0).toLocaleString("en-US")}</td></tr>`).join("")}</tbody>
         </table>
         <h2>Top recipients in sample (min 3 transaction rows)</h2>
         <table>
@@ -165,9 +183,9 @@ async function home(env, request, url) {
           <tbody>${(hub.top_recipients || []).map((r) => `<tr><td>${esc(r.name)}</td><td><code>${esc(r.id)}</code></td><td>${usd(r.obligation)}</td><td>${(r.award_count || 0).toLocaleString("en-US")}</td></tr>`).join("")}</tbody>
         </table>
         <p class="note">Recipient names can repeat under different UEIs; IDs are listed separately. There are no /recipients/{id} pages.</p>
-        <h2>Agency × FY cells that pass min-N</h2>
-        <p>${cells.length} cells shown${filtered ? " after filters" : ""}.</p>
-        <ul class="grid">${cells.map((c) => `<li><a href="/agencies/${esc(c.slug)}/${c.fy}">${esc(c.agency_name)} · FY ${c.fy}</a><span>${usd(c.obligation)} · ${c.award_count} awards · HHI ${c.hhi}</span></li>`).join("")}</ul>
+        <h2>Qualified agency hubs (min-N)</h2>
+        <p>${cells.length} hubs shown${filtered ? " after filters" : ""}. Min-N: ≥10 awards or |$10m| in this sample.</p>
+        <ul class="grid">${cells.map((c) => `<li><a href="/agencies/${esc(c.slug)}">${esc(c.agency_name)}</a><span>${usd(c.obligation)} · ${c.award_count} awards · HHI ${c.hhi} (calculated)</span></li>`).join("")}</ul>
       </div>
     </main>`;
   return html(layout(url, { title: `${SITE} — agency contract obligations (sample)`, desc: DESC, path: "/", body, noindex: filtered }));
@@ -180,78 +198,185 @@ async function agenciesIndex(env, request, url) {
     <main class="wrap">
       <h1>Awarding agencies</h1>
       ${shareBlock(url.origin + "/agencies")}
-      <p>Pages exist only where an agency × FY cell passes min-N (at least 10 awards or $10 million |obligation| in this sample).</p>
-      ${coverageNote(hub.meta)}
-      <ul class="grid">${list.map((a) => `<li><a href="/agencies/${esc(a.slug)}">${esc(a.name)}</a><span>code ${esc(a.code)} · FY ${esc((a.years || []).join(", "))}</span></li>`).join("")}</ul>
+      <p>One hub URL per agency that passes min-N (≥10 awards or |$10 million| of <code>federal_action_obligation</code> in this sample). Fiscal year is a filter on the hub, not a second URL.</p>
+      ${coverageNote(hub.meta, `<p>${esc((hub.loaded_set && hub.loaded_set.change_note) || "")}</p>`)}
+      <ul class="grid">${list.map((a) => `<li><a href="/agencies/${esc(a.slug)}">${esc(a.name)}</a><span>code ${esc(a.code)}</span></li>`).join("")}</ul>
     </main>`;
-  return html(layout(url, { title: `Agencies · ${SITE}`, desc: "Awarding agencies with min-N agency × FY reports.", path: "/agencies", body }));
+  return html(layout(url, { title: `Agencies · ${SITE}`, desc: "Awarding agencies with min-N hubs.", path: "/agencies", body }));
 }
 
-async function agencyPage(env, request, url, slug) {
-  const list = (await loadJson(env, request, "/data/agencies.json")) || [];
-  const ag = list.find((a) => a.slug === slug);
-  if (!ag) {
-    return html(layout(url, { title: `Agency not in sample · ${SITE}`, desc: DESC, path: url.pathname, body: `<main class="wrap"><h1>Agency not in this sample</h1></main>` }), 404);
-  }
-  const hub = (await loadJson(env, request, "/data/hub.json")) || { meta: {} };
-  const years = (ag.years || []).sort();
-  const body = `
-    <main class="wrap">
-      <p class="crumb"><a href="/">Home</a> / <a href="/agencies">Agencies</a> / ${esc(ag.name)}</p>
-      <h1>${esc(ag.name)}</h1>
-      ${shareBlock(url.origin + "/agencies/" + slug)}
-      <p>Awarding agency code <code>${esc(ag.code)}</code>. Year reports:</p>
-      <ul>${years.map((y) => `<li><a href="/agencies/${esc(slug)}/${y}">FY ${y}</a></li>`).join("")}</ul>
-      ${coverageNote(hub.meta)}
-    </main>`;
-  return html(layout(url, { title: `${ag.name} · ${SITE}`, desc: `Sample FY reports for ${ag.name}.`, path: `/agencies/${slug}`, body }));
-}
-
-async function agencyYear(env, request, url, slug, fy) {
-  const rec = await loadJson(env, request, `/data/agencies/${slug}-${fy}.json`);
+async function agencyHub(env, request, url, slug) {
+  const rec = await loadJson(env, request, `/data/hubs/${slug}.json`);
   if (!rec || !rec.min_n_pass) {
-    return html(layout(url, { title: `Not published · ${SITE}`, desc: DESC, path: url.pathname, body: `<main class="wrap"><h1>Not published</h1><p>This agency × FY cell is missing or fails min-N.</p></main>` }), 404);
+    return html(layout(url, { title: `Agency not published · ${SITE}`, desc: DESC, path: url.pathname, body: `<main class="wrap"><h1>Not published</h1><p>This agency is missing or fails min-N in the loaded sample.</p></main>` }), 404);
   }
-  const hub = (await loadJson(env, request, "/data/hub.json")) || { meta: {} };
+  const o = rec.observed || {};
+  const c = rec.calculated || {};
+  const fy = (url.searchParams.get("fy") || "").trim();
+  const noindex = Boolean(fy);
+  const similar = rec.similar_hubs || [];
+  const gb = rec.good_vs_bad || {};
+  const mx = rec.most_x || {};
   const body = `
     <main class="wrap">
-      <p class="crumb"><a href="/">Home</a> / <a href="/agencies">Agencies</a> / <a href="/agencies/${esc(slug)}">${esc(rec.agency_name)}</a> / FY ${esc(fy)}</p>
-      <h1>${esc(rec.agency_name)} · FY ${esc(fy)}</h1>
-      ${shareBlock(url.origin + `/agencies/${slug}/${fy}`)}
+      <p class="crumb"><a href="/">Home</a> / <a href="/agencies">Agencies</a> / ${esc(rec.agency_name)}</p>
+      <p class="kicker">Agency hub · ${esc(rec.coverage_label || "sample")} · awarding agency code ${esc(rec.agency_code)}</p>
+      <h1>${esc(rec.agency_name)}</h1>
+      ${shareBlock(url.origin + "/agencies/" + slug)}
+      <form class="filters" action="/agencies/${esc(slug)}" method="get">
+        <label>Fiscal year in sample <select name="fy"><option value="">All in sample (FY ${esc(String(rec.fy_in_sample))})</option><option value="${esc(String(rec.fy_in_sample))}"${fy === String(rec.fy_in_sample) ? " selected" : ""}>FY ${esc(String(rec.fy_in_sample))}</option></select></label>
+        <button type="submit">Apply</button>
+      </form>
+      <p class="note">Filters are query state (noindex). One canonical URL: /agencies/${esc(slug)}</p>
       <div class="answer">
-        <p class="figure">${usd(rec.obligation)}</p>
-        <p>Sum of <code>federal_action_obligation</code> in this sample. ${rec.award_count.toLocaleString("en-US")} distinct awards · ${rec.action_count.toLocaleString("en-US")} actions · ${rec.recipient_count.toLocaleString("en-US")} recipients · recipient HHI ${rec.hhi} (calculated on |obligation| shares in this cell).</p>
+        <p class="kicker">Observed · sum of federal_action_obligation</p>
+        <p class="figure">${usd(o.federal_action_obligation_sum)}</p>
+        <p>${(o.award_count || 0).toLocaleString("en-US")} distinct awards · ${(o.action_count || 0).toLocaleString("en-US")} actions · ${(o.recipient_count || 0).toLocaleString("en-US")} recipients in this sample. FY in loaded set: ${esc(String(rec.fy_in_sample))}.</p>
       </div>
-      ${coverageNote(hub.meta)}
-      <h2>Top recipients (min 3 rows in this cell)</h2>
-      ${barChart(rec.top_recipients || [], "obligation", "name", "Top recipients in this agency × FY sample cell")}
+      <p class="note"><strong>Pull / ingest:</strong> ${esc(rec.pull_date_utc || "")} UTC. Snapshot ${esc(rec.snapshot_id || "")}. ${esc(rec.change_note || "")}</p>
+      <h2>Calculated vs loaded-set average and vs similar hubs</h2>
+      <p>Calculated layer. Denominator = ${esc(String((rec.meta && rec.meta.rows_parsed) || "n/a"))} transaction rows in the loaded sample. Method: ${esc(c.method || "")}</p>
       <table>
-        <thead><tr><th>Recipient</th><th>Id</th><th>Obligation</th><th>Rows</th></tr></thead>
-        <tbody>${(rec.top_recipients || []).map((r) => `<tr><td>${esc(r.name)}</td><td><code>${esc(r.id)}</code></td><td>${usd(r.obligation)}</td><td>${r.action_count}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Metric</th><th>This hub</th><th>Loaded-set average</th><th>% vs average</th><th>Similar-hub average</th><th>% vs similar</th></tr></thead>
+        <tbody>
+          <tr><td>Obligation (USD)</td><td>${usd(o.federal_action_obligation_sum)}</td><td>${usd(c.loaded_set_avg_obligation)}</td><td>${pctLabel(c.pct_vs_loaded_set_avg_obligation)}</td><td>${usd(c.similar_avg_obligation)}</td><td>${pctLabel(c.pct_vs_similar_obligation)}</td></tr>
+          <tr><td>Awards</td><td>${(o.award_count || 0).toLocaleString("en-US")}</td><td>${c.loaded_set_avg_awards}</td><td>${pctLabel(c.pct_vs_loaded_set_avg_awards)}</td><td>${c.similar_avg_awards}</td><td>${pctLabel(c.pct_vs_similar_awards)}</td></tr>
+          <tr><td>Recipient HHI (calculated)</td><td>${c.recipient_hhi}</td><td>${c.loaded_set_avg_hhi}</td><td>${pctLabel(c.pct_vs_loaded_set_avg_hhi)}</td><td>${c.similar_avg_hhi}</td><td>${pctLabel(c.pct_vs_similar_hhi)}</td></tr>
+        </tbody>
       </table>
+      <h3>Similar hubs (similar spend / size)</h3>
+      <ul>${similar.map((s) => `<li><a href="/agencies/${esc(s.slug)}">${esc(s.name)}</a> — ${usd(s.obligation)} · ${s.award_count} awards · HHI ${s.hhi}</li>`).join("")}</ul>
+      <h2>Good vs bad (vs average and similar; vs listed-recipient average)</h2>
+      <p><strong>Vs loaded-set:</strong> ${esc(gb.vs_loaded_set || "")}. <strong>Vs similar:</strong> ${esc(gb.vs_similar || "")}.</p>
+      <p class="note">${esc(gb.note || "")} Listed-recipient average obligation (calculated on this hub’s min-3 list): ${usd(gb.listed_recipient_average_obligation)}.</p>
+      <h3>Good slice — recipients at or above listed average</h3>
+      ${recipTable(gb.good_recipients_vs_listed_average)}
+      <h3>Bad slice — recipients below listed average (most negative first)</h3>
+      ${recipTable(gb.bad_recipients_vs_listed_average)}
+      <h2>Most-X (on this hub, not a new URL family)</h2>
+      <p class="note">${esc(mx.note || "")}</p>
+      <h3>Most dollars</h3>
+      ${recipTable(mx.most_dollars)}
+      <h3>Most award rows</h3>
+      ${recipTable(mx.most_awards_rows)}
+      <h3>Largest share of listed recipients (calculated)</h3>
+      ${recipTable(mx.most_share_of_listed, "<th>Share of listed</th>", (r) => `<td>${esc(String(r.share_pct_of_listed))}%</td>`)}
+      ${barChart(rec.top_recipients || [], "obligation", "name", "Top recipients — observed federal_action_obligation in this sample")}
+      ${coverageNote(rec.meta)}
+      <p><a href="/reports?agency=${encodeURIComponent(slug)}&amp;slice=good">Compose a report (good slice)</a> · <a href="/reports?agency=${encodeURIComponent(slug)}&amp;slice=bad">bad slice</a> · <a href="/reports?agency=${encodeURIComponent(slug)}&amp;slice=most-dollars&amp;format=pdf">PDF most-dollars</a></p>
     </main>`;
-  return html(layout(url, { title: `${rec.agency_name} FY ${fy} · ${SITE}`, desc: `Sample obligated amount for ${rec.agency_name} in FY ${fy}.`, path: `/agencies/${slug}/${fy}`, body }));
+  return html(layout(url, { title: `${rec.agency_name} · ${SITE}`, desc: `Sample agency hub for ${rec.agency_name}.`, path: `/agencies/${slug}`, body, noindex }));
 }
 
-async function fyPage(env, request, url, fy) {
-  const hub = (await loadJson(env, request, "/data/hub.json")) || { fiscal_years: [], agency_year_cells: [], meta: {} };
-  const y = (hub.fiscal_years || []).find((x) => String(x.fy) === String(fy));
-  if (!y) {
-    return html(layout(url, { title: `FY ${fy} not in sample · ${SITE}`, desc: DESC, path: url.pathname, body: `<main class="wrap"><h1>FY ${esc(fy)} is not in this sample</h1></main>` }), 404);
+function sliceRows(rec, slice) {
+  const gb = rec.good_vs_bad || {};
+  const mx = rec.most_x || {};
+  if (slice === "bad") return { title: "Bad slice (below listed-recipient average)", rows: gb.bad_recipients_vs_listed_average || [] };
+  if (slice === "most-dollars") return { title: "Most dollars", rows: mx.most_dollars || [] };
+  if (slice === "most-awards") return { title: "Most award rows", rows: mx.most_awards_rows || [] };
+  if (slice === "most-share") return { title: "Largest share of listed", rows: mx.most_share_of_listed || [] };
+  if (slice === "concentration") return { title: "Largest share of listed (concentration)", rows: mx.most_share_of_listed || [] };
+  return { title: "Good slice (at or above listed-recipient average)", rows: gb.good_recipients_vs_listed_average || rec.top_recipients || [] };
+}
+
+async function reportsPage(env, request, url) {
+  const list = (await loadJson(env, request, "/data/agencies.json")) || [];
+  const hub = (await loadJson(env, request, "/data/hub.json")) || { meta: {} };
+  const agency = (url.searchParams.get("agency") || "").trim();
+  const slice = (url.searchParams.get("slice") || "good").trim();
+  const format = (url.searchParams.get("format") || "html").trim();
+  const composed = Boolean(url.searchParams.toString());
+  if (!composed) {
+    const opts = list.map((a) => `<option value="${esc(a.slug)}">${esc(a.name)}</option>`).join("");
+    const body = `
+      <main class="wrap">
+        <h1>Compose a report</h1>
+        ${shareBlock(url.origin + "/reports")}
+        <p>User-driven. Query string only; composed views are noindex. Not a locked template. No report URL farm.</p>
+        <form class="filters" action="/reports" method="get">
+          <label>Agency <select name="agency" required>${opts}</select></label>
+          <label>Slice <select name="slice">
+            <option value="good">Good (vs listed average)</option>
+            <option value="bad">Bad (vs listed average)</option>
+            <option value="most-dollars">Most dollars</option>
+            <option value="most-awards">Most award rows</option>
+            <option value="most-share">Largest listed share</option>
+            <option value="concentration">Concentration</option>
+          </select></label>
+          <label>Format <select name="format"><option value="html">HTML</option><option value="pdf">PDF</option></select></label>
+          <button type="submit">Build</button>
+        </form>
+        ${coverageNote(hub.meta)}
+      </main>`;
+    return html(layout(url, { title: `Reports · ${SITE}`, desc: "Compose an on-demand agency slice report.", path: "/reports", body }));
   }
-  const cells = (hub.agency_year_cells || []).filter((c) => String(c.fy) === String(fy));
+  const rec = await loadJson(env, request, `/data/hubs/${agency}.json`);
+  if (!rec) {
+    return html(layout(url, { title: `Report not available · ${SITE}`, desc: DESC, path: "/reports", body: `<main class="wrap"><h1>Choose a qualified agency</h1></main>`, noindex: true }), 404);
+  }
+  const sl = sliceRows(rec, slice);
+  if (format === "pdf") {
+    const pdf = buildPdf(rec, sl);
+    return new Response(pdf, {
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": `attachment; filename="${agency}-${slice}.pdf"`,
+        "x-robots-tag": "noindex, nofollow",
+      },
+    });
+  }
   const body = `
     <main class="wrap">
-      <h1>FY ${esc(fy)} sample</h1>
-      ${shareBlock(url.origin + "/reports/" + fy)}
-      <div class="answer"><p class="figure">${usd(y.obligation)}</p><p>${y.award_count.toLocaleString("en-US")} awards · ${y.action_count.toLocaleString("en-US")} actions in this sample.</p></div>
-      ${coverageNote(hub.meta)}
-      <table>
-        <thead><tr><th>Agency</th><th>Obligation</th><th>Awards</th><th>HHI</th></tr></thead>
-        <tbody>${cells.map((c) => `<tr><td><a href="/agencies/${esc(c.slug)}/${fy}">${esc(c.agency_name)}</a></td><td>${usd(c.obligation)}</td><td>${c.award_count}</td><td>${c.hhi}</td></tr>`).join("")}</tbody>
-      </table>
+      <p class="kicker">On-demand report · noindex · sample</p>
+      <h1>${esc(rec.agency_name)} — ${esc(sl.title)}</h1>
+      <p>Pull / ingest ${esc(rec.pull_date_utc || "")} UTC. ${esc(rec.change_note || "")}</p>
+      <p><a href="/agencies/${esc(agency)}">Agency hub</a> · <a href="${esc(url.pathname + url.search + (url.search.includes("format=") ? "" : (url.search ? "&" : "?") + "format=pdf"))}">Download PDF</a></p>
+      ${recipTable(sl.rows)}
+      ${coverageNote(rec.meta)}
     </main>`;
-  return html(layout(url, { title: `FY ${fy} report · ${SITE}`, desc: `Sample FY ${fy} agency obligations.`, path: `/reports/${fy}`, body }));
+  return html(layout(url, { title: `Report · ${rec.agency_name} · ${SITE}`, desc: sl.title, path: "/reports", body, noindex: true, canonicalOverride: url.origin + "/reports" }));
+}
+
+function pdfEscape(s) {
+  return String(s || "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function buildPdf(rec, sl) {
+  const lines = [];
+  lines.push("US Federal Spending — on-demand report (sample)");
+  lines.push((rec.agency_name || "") + " — " + (sl.title || ""));
+  lines.push("Pull / ingest: " + (rec.pull_date_utc || "") + " UTC");
+  lines.push(rec.change_note || "");
+  lines.push("Coverage: sample. Official fields only: federal_action_obligation, recipient_name, recipient_uei.");
+  lines.push("Source: USAspending Award Data Archive FY2025_All_Contracts_Full_20260806.zip");
+  lines.push("");
+  for (const r of (sl.rows || []).slice(0, 20)) {
+    lines.push(`${(r.name || "").slice(0, 42)}  ${r.id || ""}  ${usd(r.obligation)}`);
+  }
+  lines.push("");
+  lines.push(ATTR.slice(0, 220));
+  const content = lines.map((ln, i) => `BT /F1 10 Tf 40 ${760 - i * 14} Td (${pdfEscape(ln.slice(0, 110))}) Tj ET`).join("\n");
+  const objects = [];
+  objects.push("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj");
+  objects.push("2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj");
+  objects.push("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj");
+  objects.push(`4 0 obj << /Length ${content.length} >> stream\n${content}\nendstream endobj`);
+  objects.push("5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj");
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const obj of objects) {
+    offsets.push(pdf.length);
+    pdf += obj + "\n";
+  }
+  const xrefAt = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let i = 1; i < offsets.length; i++) {
+    pdf += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
+  }
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF`;
+  return pdf;
 }
 
 async function concentration(env, request, url) {
@@ -260,14 +385,14 @@ async function concentration(env, request, url) {
     <main class="wrap">
       <h1>Concentration</h1>
       ${shareBlock(url.origin + "/reports/concentration")}
-      <p>Agency HHI in this sample: <strong>${esc(String(hub.agency_hhi))}</strong> (sum of squared agency shares of |obligation| × 10,000). Calculated, not observed. Cell-level recipient HHI is on each agency × FY page.</p>
-      ${coverageNote(hub.meta)}
+      <p>Agency HHI in this sample: <strong>${esc(String(hub.agency_hhi))}</strong> (sum of squared agency shares of |obligation| × 10,000). Calculated, not observed.</p>
+      ${coverageNote(hub.meta, `<p>${esc((hub.loaded_set && hub.loaded_set.change_note) || "")}</p>`)}
       <h2>Agency shares (top 20)</h2>
       ${barChart(hub.top_agencies || [], "obligation", "name", "Agency obligation shares, sample")}
-      <h2>Highest cell HHI (recipient concentration)</h2>
+      <h2>Highest hub HHI (recipient concentration)</h2>
       <table>
-        <thead><tr><th>Agency × FY</th><th>HHI</th><th>Obligation</th></tr></thead>
-        <tbody>${[...(hub.agency_year_cells || [])].sort((a, b) => b.hhi - a.hhi).slice(0, 15).map((c) => `<tr><td><a href="/agencies/${esc(c.slug)}/${c.fy}">${esc(c.agency_name)} FY ${c.fy}</a></td><td>${c.hhi}</td><td>${usd(c.obligation)}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Agency hub</th><th>HHI</th><th>Obligation</th></tr></thead>
+        <tbody>${[...(hub.agency_year_cells || [])].sort((a, b) => b.hhi - a.hhi).slice(0, 15).map((c) => `<tr><td><a href="/agencies/${esc(c.slug)}">${esc(c.agency_name)}</a></td><td>${c.hhi}</td><td>${usd(c.obligation)}</td></tr>`).join("")}</tbody>
       </table>
     </main>`;
   return html(layout(url, { title: `Concentration · ${SITE}`, desc: "Agency and recipient concentration (HHI) in the sample.", path: "/reports/concentration", body }));
@@ -294,8 +419,8 @@ async function about(url) {
     <main class="wrap">
       <h1>About</h1>
       ${shareBlock(url.origin + "/about")}
-      <p>${SITE} is an independent evidence reader for US federal <em>contract</em> actions in one USAspending Award Data Archive file. It is not USAspending.gov, not a Treasury product, and not a complete picture of federal spending (grants, loans, and later zip members are out of this projection).</p>
-      <p>Public pages are agency and year reports that clear min-N. There are no <code>/awards/</code> pages.</p>
+      <p>${SITE} is an independent evidence reader for US federal <em>contract</em> actions in one USAspending Award Data Archive file. It is not USAspending.gov, not a Treasury product, and not a complete picture of federal spending.</p>
+      <p>Public pages are agency hubs that clear min-N. There are no <code>/awards/</code> pages and no year URL farms.</p>
       <p>Operator: 37X / ASAP Ventures. Related UK twin: <a href="https://ukpublicmoney.co.uk/">UK Public Money</a> (different corpus).</p>
     </main>`;
   return html(layout(url, { title: `About · ${SITE}`, desc: "Independent USAspending archive reader.", path: "/about", body }));
@@ -309,15 +434,15 @@ async function methodology(env, request, url) {
       ${shareBlock(url.origin + "/methodology")}
       ${coverageNote(meta)}
       <h2>Fiscal year</h2>
-      <p>US federal FY starts 1 October. FY is taken from <code>action_date</code> (year + 1 when month ≥ 10). The archive filename is FY2025; this sample’s dates all mapped to FY 2025.</p>
+      <p>US federal FY starts 1 October. FY is taken from <code>action_date</code> (year + 1 when month ≥ 10). Shown as a filter on the agency hub, not as a year URL.</p>
       <h2>What is summed</h2>
-      <p><code>federal_action_obligation</code> on each transaction row. Award-level running totals such as <code>total_dollars_obligated</code> are not summed (they would double-count).</p>
+      <p>Observed: <code>federal_action_obligation</code> on each transaction row. Award-level running totals such as <code>total_dollars_obligated</code> are not summed (they would double-count).</p>
       <h2>Min-N</h2>
-      <p>An agency × FY HTML page is published only if distinct <code>contract_award_unique_key</code> count ≥ 10 or |obligation| ≥ $10,000,000 in this sample. Recipient rows on lists require ≥ 3 transaction rows. Empty cells are omitted (404), not noindexed shells.</p>
-      <h2>HHI</h2>
-      <p>Calculated: sum of squared shares of |obligation| × 10,000. Labelled calculated.</p>
+      <p>An agency hub is published only if distinct <code>contract_award_unique_key</code> count ≥ 10 or |obligation| ≥ $10,000,000 in this sample.</p>
+      <h2>Comparisons</h2>
+      <p>Calculated: percent versus the mean of all qualified hubs in the loaded set, and versus the mean of four similar hubs (nearest log spend and size). HHI is calculated.</p>
     </main>`;
-  return html(layout(url, { title: `Methodology · ${SITE}`, desc: "How agency × FY sums are computed.", path: "/methodology", body }));
+  return html(layout(url, { title: `Methodology · ${SITE}`, desc: "How agency hubs are computed.", path: "/methodology", body }));
 }
 
 async function sources(env, request, url) {
@@ -330,40 +455,36 @@ async function sources(env, request, url) {
       <ul>
         <li>Official archive: <a href="https://www.usaspending.gov/download_center/award_data_archive">USAspending Award Data Archive</a></li>
         <li>File: ${esc(meta.file || "")} (published 20260806; copied to R2 on ${esc(meta.archive_date || "")})</li>
-        <li>R2 object used for this build: ${esc(meta.r2_object || "")} (${esc(String(meta.part_bytes || ""))} bytes)</li>
+        <li>R2 object used for this build: ${esc(meta.r2_object || "")}</li>
         <li>Licence: ${esc(meta.licence || "")}</li>
       </ul>
-      <p>Official search: <a href="https://www.usaspending.gov/">usaspending.gov</a>. Use that product to look up a single award.</p>
+      <p>Official search: <a href="https://www.usaspending.gov/">usaspending.gov</a>.</p>
     </main>`;
   return html(layout(url, { title: `Data sources · ${SITE}`, desc: "USAspending Award Data Archive provenance.", path: "/data-sources", body }));
 }
 
 async function sitemap(env, request, origin) {
   const list = (await loadJson(env, request, "/data/agencies.json")) || [];
-  const hub = (await loadJson(env, request, "/data/hub.json")) || { fiscal_years: [] };
   const urls = [
     `${origin}/`,
     `${origin}/agencies`,
     `${origin}/recipients`,
+    `${origin}/reports`,
     `${origin}/reports/concentration`,
     `${origin}/about`,
     `${origin}/methodology`,
     `${origin}/data-sources`,
   ];
-  for (const y of hub.fiscal_years || []) urls.push(`${origin}/reports/${y.fy}`);
-  for (const a of list) {
-    urls.push(`${origin}/agencies/${a.slug}`);
-    for (const y of a.years || []) urls.push(`${origin}/agencies/${a.slug}/${y}`);
-  }
+  for (const a of list) urls.push(`${origin}/agencies/${a.slug}`);
   return new Response(
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n")}\n</urlset>\n`,
     { headers: { "content-type": "application/xml; charset=utf-8" } }
   );
 }
 
-function layout(url, { title, desc, path, body, noindex }) {
+function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
   const origin = url.origin;
-  const canonical = `${origin}${path === "/" ? "/" : path}`;
+  const canonical = canonicalOverride || `${origin}${path === "/" ? "/" : path}`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -385,17 +506,15 @@ function layout(url, { title, desc, path, body, noindex }) {
   <meta property="og:image" content="${esc(origin)}/og.png">
   <meta property="og:site_name" content="${esc(SITE)}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${esc(title)}">
-  <meta name="twitter:description" content="${esc(desc)}">
   <style>
     :root { --navy:#0a3161; --gold:#c5a572; --paper:#f4f1ea; --ink:#1b1b18; --muted:#5c574c; --card:#fffdf8; }
     * { box-sizing:border-box; }
     body { margin:0; font: 18px/1.5 "Nimbus Roman", "Times New Roman", Georgia, serif; color:var(--ink); background:var(--paper); }
-    h1,h2 { font-weight:700; letter-spacing:-0.01em; }
+    h1,h2,h3 { font-weight:700; letter-spacing:-0.01em; }
     header { background:var(--navy); color:var(--paper); border-bottom:4px solid var(--gold); }
     header .wrap { max-width:980px; margin:0 auto; padding:.75rem 1.2rem; display:flex; flex-wrap:wrap; gap:.8rem 1.2rem; align-items:center; }
     .brand { display:flex; align-items:center; gap:.6rem; color:var(--paper); text-decoration:none; font-weight:700; }
-    .brand svg, .brand img { width:40px; height:40px; }
+    .brand img { width:40px; height:40px; }
     nav { display:flex; gap:1rem; flex-wrap:wrap; }
     header a, footer a { color:#e6d5b8; }
     .hero { background:linear-gradient(180deg,#0a3161 0%, #123e73 100%); color:var(--paper); padding:2rem 0 2.2rem; }
@@ -416,7 +535,7 @@ function layout(url, { title, desc, path, body, noindex }) {
     th,td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid #e4ddd0; vertical-align:top; }
     .share { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
     .share span { font-size:.75rem; letter-spacing:.08em; }
-    .meta, .note, small, figcaption { color:var(--muted); font-size:.9rem; }
+    .note, small, figcaption { color:var(--muted); font-size:.9rem; }
     a { color:var(--navy); }
     figure svg { background:var(--navy); padding:8px; }
     footer { background:var(--navy); color:#e7ddd0; margin-top:2rem; border-top:4px solid var(--gold); }
@@ -431,6 +550,7 @@ function layout(url, { title, desc, path, body, noindex }) {
         <a href="/">Home</a>
         <a href="/agencies">Agencies</a>
         <a href="/recipients">Recipients</a>
+        <a href="/reports">Reports</a>
         <a href="/reports/concentration">Concentration</a>
         <a href="/methodology">Method</a>
         <a href="/data-sources">Sources</a>
