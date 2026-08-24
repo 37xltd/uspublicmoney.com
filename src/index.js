@@ -2,7 +2,7 @@
  * US Federal Spending — precomputed projections only.
  */
 const SITE = "US Federal Spending";
-const DESC = "Awarding-agency contract obligations from the USAspending Award Data Archive. Independent reader; not Treasury or OMB.";
+const DESC = "See which US government agencies and companies received contract money. Uses a sample from the USAspending archive.";
 const ATTR = "Derived from USAspending.gov (U.S. Department of the Treasury, Bureau of the Fiscal Service). U.S. government work, public domain (17 U.S.C. 105). This site is not the official USAspending search and is not endorsed by Treasury or OMB.";
 
 export default {
@@ -97,10 +97,10 @@ function coverageNote(meta, extra) {
   return `<aside class="prov">
     <h2>Source, date, method</h2>
     <p><strong>Coverage:</strong> ${esc(meta.coverage_label || "sample")} — ${esc(meta.coverage || "Sample of one archive chunk. Not full-archive totals.")}</p>
-    <p><strong>Pull / ingest:</strong> ${esc(meta.retrieved_utc || "")} UTC. Archive dated ${esc(meta.archive_date || "")}.</p>
+    <p><strong>Data loaded:</strong> ${esc(meta.retrieved_utc || "")} UTC. Archive date: ${esc(meta.archive_date || "")}.</p>
     <p><strong>Source:</strong> ${esc(meta.source || "USAspending.gov Award Data Archive")} · file ${esc(meta.file || "")} · member ${esc(meta.member || "")}.</p>
     <p><strong>Method:</strong> ${esc(meta.method || "")}</p>
-    <p><strong>Rows in this projection:</strong> ${esc(String(meta.rows_parsed ?? "n/a"))} transaction rows. Units: US dollars of <code>federal_action_obligation</code>. Denominator: this loaded set only.</p>
+    <p><strong>Rows used:</strong> ${esc(String(meta.rows_parsed ?? "n/a"))} money records. Amounts are US dollars. All percentages use this loaded sample only.</p>
     ${extra || ""}
     <p>${esc(ATTR)}</p>
   </aside>`;
@@ -149,42 +149,42 @@ async function home(env, request, url) {
     <main>
       <section class="hero">
         <div class="wrap">
-          <p class="kicker">United States · contract actions · sample</p>
-          <h1>Who obligated what, by awarding agency.</h1>
-          <p class="lede">Independent projection of USAspending Award Data Archive contracts. One hub URL per qualified agency. Not a search of every award. No per-award pages.</p>
+          <p class="kicker">United States · government contracts · sample</p>
+          <h1>Who gave out the money?</h1>
+          <p class="lede">See how much contract money each US government agency gave out, and which companies received it. This is a sample, not every award.</p>
           ${shareBlock(url.origin + "/")}
           <form class="filters" action="/" method="get">
-            <label>Fiscal year <select name="fy"><option value="">All in sample</option>${years}</select></label>
-            <label>Agency <select name="agency"><option value="">All agencies</option>${ags}</select></label>
-            <button type="submit">Apply</button>
+            <label>Year <select name="fy"><option value="">All years in sample</option>${years}</select></label>
+            <label>Government agency <select name="agency"><option value="">All agencies</option>${ags}</select></label>
+            <button type="submit">Show results</button>
           </form>
           <p class="note">Filters are query state only (noindex). They do not create extra URLs.</p>
         </div>
       </section>
       <div class="wrap">
         <div class="answer">
-          <p class="kicker">Sample total in view (observed)</p>
+          <p class="kicker">Money in this sample</p>
           <p class="figure">${usd(total)}</p>
           <p>${awards.toLocaleString("en-US")} distinct awards · ${actions.toLocaleString("en-US")} transaction rows · agency HHI ${esc(String(hub.agency_hhi))} (0–10,000, calculated on this sample’s agency obligation shares).</p>
           <p class="note">Pull date ${esc((hub.meta && hub.meta.retrieved_utc) || "")} UTC. ${esc(change)}</p>
         </div>
         ${coverageNote(hub.meta)}
-        <h2>Fiscal years in this projection</h2>
+        <h2>Money by year</h2>
         <ul>${fyLine || "<li>None</li>"}</ul>
-        <h2>Top awarding agencies</h2>
+        <h2>Agencies that gave out the most money</h2>
         ${barChart(hub.top_agencies || [], "obligation", "name", "Top agencies by summed federal_action_obligation in this sample (observed)")}
         <table>
           <thead><tr><th>Agency</th><th>Code</th><th>Obligation (sample, observed)</th><th>Awards</th></tr></thead>
           <tbody>${(hub.top_agencies || []).map((a) => `<tr><td><a href="/agencies/${esc(a.slug)}">${esc(a.name)}</a></td><td>${esc(a.code)}</td><td>${usd(a.obligation)}</td><td>${(a.award_count || 0).toLocaleString("en-US")}</td></tr>`).join("")}</tbody>
         </table>
-        <h2>Top recipients in sample (min 3 transaction rows)</h2>
+        <h2>Companies and groups that received the most money</h2>
         <table>
           <thead><tr><th>Recipient</th><th>UEI / id</th><th>Obligation (sample)</th><th>Rows</th></tr></thead>
           <tbody>${(hub.top_recipients || []).map((r) => `<tr><td>${esc(r.name)}</td><td><code>${esc(r.id)}</code></td><td>${usd(r.obligation)}</td><td>${(r.award_count || 0).toLocaleString("en-US")}</td></tr>`).join("")}</tbody>
         </table>
         <p class="note">Recipient names can repeat under different UEIs; IDs are listed separately. There are no /recipients/{id} pages.</p>
-        <h2>Qualified agency hubs (min-N)</h2>
-        <p>${cells.length} hubs shown${filtered ? " after filters" : ""}. Min-N: ≥10 awards or |$10m| in this sample.</p>
+        <h2>Government agencies</h2>
+        <p>${cells.length} agencies shown${filtered ? " after filters" : ""}. We only show agencies with enough records to make the figures useful.</p>
         <ul class="grid">${cells.map((c) => `<li><a href="/agencies/${esc(c.slug)}">${esc(c.agency_name)}</a><span>${usd(c.obligation)} · ${c.award_count} awards · HHI ${c.hhi} (calculated)</span></li>`).join("")}</ul>
       </div>
     </main>`;
@@ -198,7 +198,7 @@ async function agenciesIndex(env, request, url) {
     <main class="wrap">
       <h1>Awarding agencies</h1>
       ${shareBlock(url.origin + "/agencies")}
-      <p>One hub URL per agency that passes min-N (≥10 awards or |$10 million| of <code>federal_action_obligation</code> in this sample). Fiscal year is a filter on the hub, not a second URL.</p>
+      <p>Each agency has one page. We only publish an agency page when the sample has enough records to make the figures useful. Year is a filter on that page.</p>
       ${coverageNote(hub.meta, `<p>${esc((hub.loaded_set && hub.loaded_set.change_note) || "")}</p>`)}
       <ul class="grid">${list.map((a) => `<li><a href="/agencies/${esc(a.slug)}">${esc(a.name)}</a><span>code ${esc(a.code)}</span></li>`).join("")}</ul>
     </main>`;
@@ -220,22 +220,22 @@ async function agencyHub(env, request, url, slug) {
   const body = `
     <main class="wrap">
       <p class="crumb"><a href="/">Home</a> / <a href="/agencies">Agencies</a> / ${esc(rec.agency_name)}</p>
-      <p class="kicker">Agency hub · ${esc(rec.coverage_label || "sample")} · awarding agency code ${esc(rec.agency_code)}</p>
+      <p class="kicker">Agency page · ${esc(rec.coverage_label || "sample")} · agency code ${esc(rec.agency_code)}</p>
       <h1>${esc(rec.agency_name)}</h1>
       ${shareBlock(url.origin + "/agencies/" + slug)}
       <form class="filters" action="/agencies/${esc(slug)}" method="get">
-        <label>Fiscal year in sample <select name="fy"><option value="">All in sample (FY ${esc(String(rec.fy_in_sample))})</option><option value="${esc(String(rec.fy_in_sample))}"${fy === String(rec.fy_in_sample) ? " selected" : ""}>FY ${esc(String(rec.fy_in_sample))}</option></select></label>
-        <button type="submit">Apply</button>
+        <label>Year <select name="fy"><option value="">All in sample (FY ${esc(String(rec.fy_in_sample))})</option><option value="${esc(String(rec.fy_in_sample))}"${fy === String(rec.fy_in_sample) ? " selected" : ""}>FY ${esc(String(rec.fy_in_sample))}</option></select></label>
+        <button type="submit">Show results</button>
       </form>
       <p class="note">Filters are query state (noindex). One canonical URL: /agencies/${esc(slug)}</p>
       <div class="answer">
-        <p class="kicker">Observed · sum of federal_action_obligation</p>
+        <p class="kicker">Observed amount in the data</p>
         <p class="figure">${usd(o.federal_action_obligation_sum)}</p>
         <p>${(o.award_count || 0).toLocaleString("en-US")} distinct awards · ${(o.action_count || 0).toLocaleString("en-US")} actions · ${(o.recipient_count || 0).toLocaleString("en-US")} recipients in this sample. FY in loaded set: ${esc(String(rec.fy_in_sample))}.</p>
       </div>
-      <p class="note"><strong>Pull / ingest:</strong> ${esc(rec.pull_date_utc || "")} UTC. Snapshot ${esc(rec.snapshot_id || "")}. ${esc(rec.change_note || "")}</p>
-      <h2>Calculated vs loaded-set average and vs similar hubs</h2>
-      <p>Calculated layer. Denominator = ${esc(String((rec.meta && rec.meta.rows_parsed) || "n/a"))} transaction rows in the loaded sample. Method: ${esc(c.method || "")}</p>
+      <p class="note"><strong>Data loaded:</strong> ${esc(rec.pull_date_utc || "")} UTC. Snapshot: ${esc(rec.snapshot_id || "")}. ${esc(rec.change_note || "")}</p>
+      <h2>How this agency compares</h2>
+      <p>These figures are calculated, not copied from the source. They use ${esc(String((rec.meta && rec.meta.rows_parsed) || "n/a"))} money records in the sample. ${esc(c.method || "")}</p>
       <table>
         <thead><tr><th>Metric</th><th>This hub</th><th>Loaded-set average</th><th>% vs average</th><th>Similar-hub average</th><th>% vs similar</th></tr></thead>
         <tbody>
@@ -246,14 +246,14 @@ async function agencyHub(env, request, url, slug) {
       </table>
       <h3>Similar hubs (similar spend / size)</h3>
       <ul>${similar.map((s) => `<li><a href="/agencies/${esc(s.slug)}">${esc(s.name)}</a> — ${usd(s.obligation)} · ${s.award_count} awards · HHI ${s.hhi}</li>`).join("")}</ul>
-      <h2>Good vs bad (vs average and similar; vs listed-recipient average)</h2>
+      <h2>Recipients above and below this agency’s average</h2>
       <p><strong>Vs loaded-set:</strong> ${esc(gb.vs_loaded_set || "")}. <strong>Vs similar:</strong> ${esc(gb.vs_similar || "")}.</p>
       <p class="note">${esc(gb.note || "")} Listed-recipient average obligation (calculated on this hub’s min-3 list): ${usd(gb.listed_recipient_average_obligation)}.</p>
-      <h3>Good slice — recipients at or above listed average</h3>
+      <h3>Recipients above the listed average</h3>
       ${recipTable(gb.good_recipients_vs_listed_average)}
-      <h3>Bad slice — recipients below listed average (most negative first)</h3>
+      <h3>Recipients below the listed average</h3>
       ${recipTable(gb.bad_recipients_vs_listed_average)}
-      <h2>Most-X (on this hub, not a new URL family)</h2>
+      <h2>Other useful rankings</h2>
       <p class="note">${esc(mx.note || "")}</p>
       <h3>Most dollars</h3>
       ${recipTable(mx.most_dollars)}
@@ -271,12 +271,12 @@ async function agencyHub(env, request, url, slug) {
 function sliceRows(rec, slice) {
   const gb = rec.good_vs_bad || {};
   const mx = rec.most_x || {};
-  if (slice === "bad") return { title: "Bad slice (below listed-recipient average)", rows: gb.bad_recipients_vs_listed_average || [] };
-  if (slice === "most-dollars") return { title: "Most dollars", rows: mx.most_dollars || [] };
-  if (slice === "most-awards") return { title: "Most award rows", rows: mx.most_awards_rows || [] };
-  if (slice === "most-share") return { title: "Largest share of listed", rows: mx.most_share_of_listed || [] };
-  if (slice === "concentration") return { title: "Largest share of listed (concentration)", rows: mx.most_share_of_listed || [] };
-  return { title: "Good slice (at or above listed-recipient average)", rows: gb.good_recipients_vs_listed_average || rec.top_recipients || [] };
+  if (slice === "bad") return { title: "Recipients below the listed average", rows: gb.bad_recipients_vs_listed_average || [] };
+  if (slice === "most-dollars") return { title: "Recipients with the most money", rows: mx.most_dollars || [] };
+  if (slice === "most-awards") return { title: "Recipients with the most records", rows: mx.most_awards_rows || [] };
+  if (slice === "most-share") return { title: "Recipients with the largest share", rows: mx.most_share_of_listed || [] };
+  if (slice === "concentration") return { title: "Money concentration", rows: mx.most_share_of_listed || [] };
+  return { title: "Recipients above the listed average", rows: gb.good_recipients_vs_listed_average || rec.top_recipients || [] };
 }
 
 async function reportsPage(env, request, url) {
@@ -290,21 +290,21 @@ async function reportsPage(env, request, url) {
     const opts = list.map((a) => `<option value="${esc(a.slug)}">${esc(a.name)}</option>`).join("");
     const body = `
       <main class="wrap">
-        <h1>Compose a report</h1>
+        <h1>Make a report</h1>
         ${shareBlock(url.origin + "/reports")}
-        <p>User-driven. Query string only; composed views are noindex. Not a locked template. No report URL farm.</p>
+        <p>Choose an agency and the view you want. The report is made when you ask for it and is not listed in search results.</p>
         <form class="filters" action="/reports" method="get">
           <label>Agency <select name="agency" required>${opts}</select></label>
-          <label>Slice <select name="slice">
-            <option value="good">Good (vs listed average)</option>
-            <option value="bad">Bad (vs listed average)</option>
-            <option value="most-dollars">Most dollars</option>
-            <option value="most-awards">Most award rows</option>
-            <option value="most-share">Largest listed share</option>
-            <option value="concentration">Concentration</option>
+          <label>What to show <select name="slice">
+            <option value="good">Recipients above average</option>
+            <option value="bad">Recipients below average</option>
+            <option value="most-dollars">Most money</option>
+            <option value="most-awards">Most records</option>
+            <option value="most-share">Largest share</option>
+            <option value="concentration">How concentrated the money is</option>
           </select></label>
           <label>Format <select name="format"><option value="html">HTML</option><option value="pdf">PDF</option></select></label>
-          <button type="submit">Build</button>
+          <button type="submit">Make report</button>
         </form>
         ${coverageNote(hub.meta)}
       </main>`;
@@ -402,9 +402,9 @@ async function recipientsPage(env, request, url) {
   const hub = (await loadJson(env, request, "/data/hub.json")) || { top_recipients: [], meta: {} };
   const body = `
     <main class="wrap">
-      <h1>Recipients (national sample list)</h1>
+      <h1>Companies and groups that received money</h1>
       ${shareBlock(url.origin + "/recipients")}
-      <p>One index of top recipients with at least 3 transaction rows. No per-recipient URLs (URL-farm rule).</p>
+      <p>This list shows the largest recipients in the sample. We need at least three records before a recipient is included.</p>
       ${coverageNote(hub.meta)}
       <table>
         <thead><tr><th>Recipient</th><th>Id</th><th>Obligation (sample)</th><th>Rows</th></tr></thead>
@@ -420,7 +420,7 @@ async function about(url) {
       <h1>About</h1>
       ${shareBlock(url.origin + "/about")}
       <p>${SITE} is an independent evidence reader for US federal <em>contract</em> actions in one USAspending Award Data Archive file. It is not USAspending.gov, not a Treasury product, and not a complete picture of federal spending.</p>
-      <p>Public pages are agency hubs that clear min-N. There are no <code>/awards/</code> pages and no year URL farms.</p>
+      <p>This site helps you understand government contract money by agency. It does not create a page for every individual award or every year.</p>
       <p>Operator: 37X / ASAP Ventures. Related UK twin: <a href="https://ukpublicmoney.co.uk/">UK Public Money</a> (different corpus).</p>
     </main>`;
   return html(layout(url, { title: `About · ${SITE}`, desc: "Independent USAspending archive reader.", path: "/about", body }));
@@ -433,14 +433,14 @@ async function methodology(env, request, url) {
       <h1>Methodology</h1>
       ${shareBlock(url.origin + "/methodology")}
       ${coverageNote(meta)}
-      <h2>Fiscal year</h2>
-      <p>US federal FY starts 1 October. FY is taken from <code>action_date</code> (year + 1 when month ≥ 10). Shown as a filter on the agency hub, not as a year URL.</p>
+      <h2>Year</h2>
+      <p>The US government year starts on 1 October. We work out the year from the date on each money record. Year is a filter, not a separate page.</p>
       <h2>What is summed</h2>
       <p>Observed: <code>federal_action_obligation</code> on each transaction row. Award-level running totals such as <code>total_dollars_obligated</code> are not summed (they would double-count).</p>
-      <h2>Min-N</h2>
-      <p>An agency hub is published only if distinct <code>contract_award_unique_key</code> count ≥ 10 or |obligation| ≥ $10,000,000 in this sample.</p>
+      <h2>Why some agencies are not shown</h2>
+      <p>An agency page is shown only when the sample has at least 10 different awards or at least $10 million in contract money. This helps avoid misleading results from tiny samples.</p>
       <h2>Comparisons</h2>
-      <p>Calculated: percent versus the mean of all qualified hubs in the loaded set, and versus the mean of four similar hubs (nearest log spend and size). HHI is calculated.</p>
+      <p>Comparison figures are calculated from this sample. We compare each agency with the average agency and with four agencies of a similar size. The concentration number is also calculated.</p>
     </main>`;
   return html(layout(url, { title: `Methodology · ${SITE}`, desc: "How agency hubs are computed.", path: "/methodology", body }));
 }
