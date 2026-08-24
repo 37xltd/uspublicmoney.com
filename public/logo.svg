@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="US Federal Spending mark">
+  <rect width="64" height="64" rx="6" fill="#0a3161"/>
+  <rect x="4" y="4" width="56" height="56" rx="3" fill="none" stroke="#c5a572" stroke-width="1.5"/>
+  <polygon points="32,12 36,24 32,22 28,24" fill="#c5a572"/>
+  <circle cx="32" cy="30" r="7" fill="none" stroke="#f4f1ea" stroke-width="1.5"/>
+  <path d="M18 46 L32 34 L46 46" fill="none" stroke="#c5a572" stroke-width="2"/>
+  <rect x="16" y="46" width="32" height="6" fill="#f4f1ea"/>
+  <text x="32" y="51.2" text-anchor="middle" font-size="5" font-family="Georgia, serif" fill="#0a3161">$</text>
+</svg>

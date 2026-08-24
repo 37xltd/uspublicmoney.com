@@ -1,0 +1,9 @@
+name = "us-federal-spending"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+account_id = "15e6d5c00c1f0b9390bbfd82b1ac3ada"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
