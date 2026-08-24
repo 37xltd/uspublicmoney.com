@@ -19,7 +19,7 @@ export default {
         path === "/apple-touch-icon.png" ||
         path === "/site.webmanifest"
       ) {
-        return assetFile(env, path === "/favicon.ico" ? "/favicon.png" : path, path === "/favicon.ico" ? "image/png" : null);
+        return assetFile(env, path, path === "/favicon.ico" ? "image/x-icon" : null);
       }
       if (path === "/robots.txt") {
         return text(`User-agent: *\nAllow: /\nDisallow: /*?\nDisallow: /reports?\nSitemap: ${url.origin}/sitemap.xml\n`);
