@@ -94,10 +94,13 @@ function shareBlock(canonical) {
 
 function coverageNote(meta, extra) {
   meta = meta || {};
+  const coverage = meta.coverage_label || "sample";
+  const snapshot = meta.retrieved_utc || meta.pull_date_utc || "not available";
   return `<aside class="prov">
     <h2>Source, date, method</h2>
-    <p><strong>Coverage:</strong> ${esc(meta.coverage_label || "sample")} — ${esc(meta.coverage || "Sample of one archive chunk. Not full-archive totals.")}</p>
-    <p><strong>Data loaded:</strong> ${esc(meta.retrieved_utc || "")} UTC. Archive date: ${esc(meta.archive_date || "")}.</p>
+    <p><strong>Coverage status:</strong> ${esc(coverage)} — ${esc(meta.coverage || "Sample of one archive chunk. Not full-archive totals.")}</p>
+    <p><strong>Last successful snapshot:</strong> ${esc(snapshot)} UTC. Archive date: ${esc(meta.archive_date || "")}.</p>
+    <p><strong>Freshness:</strong> held snapshot; this page does not imply live or complete national coverage.</p>
     <p><strong>Source:</strong> ${esc(meta.source || "USAspending.gov Award Data Archive")} · file ${esc(meta.file || "")} · member ${esc(meta.member || "")}.</p>
     <p><strong>Method:</strong> ${esc(meta.method || "")}</p>
     <p><strong>Rows used:</strong> ${esc(String(meta.rows_parsed ?? "n/a"))} money records. Amounts are US dollars. All percentages use this loaded sample only.</p>
