@@ -488,6 +488,34 @@ async function sitemap(env, request, origin) {
 function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
   const origin = url.origin;
   const canonical = canonicalOverride || `${origin}${path === "/" ? "/" : path}`;
+  const structuredData = JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${origin}/#organization`,
+        name: SITE,
+        url: `${origin}/`,
+        logo: `${origin}/logo.svg`,
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${origin}/#website`,
+        name: SITE,
+        url: `${origin}/`,
+        description: "Independent, source-attributed views of United States federal spending.",
+        publisher: { "@id": `${origin}/#organization` },
+      },
+      {
+        "@type": "WebPage",
+        "@id": `${canonical}#webpage`,
+        url: canonical,
+        name: title,
+        description: desc,
+        isPartOf: { "@id": `${origin}/#website` },
+      },
+    ],
+  }).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -509,6 +537,7 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
   <meta property="og:image" content="${esc(origin)}/og.png">
   <meta property="og:site_name" content="${esc(SITE)}">
   <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">${structuredData}</script>
   <style>
     :root { --navy:#0a3161; --gold:#c5a572; --paper:#f4f1ea; --ink:#1b1b18; --muted:#5c574c; --card:#fffdf8; }
     * { box-sizing:border-box; }
