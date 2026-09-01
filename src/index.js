@@ -1,8 +1,9 @@
 /**
  * US Federal Spending — precomputed projections only.
  */
-const SITE = "US Federal Spending";
-const DESC = "See which US government agencies and companies received contract money. Uses a sample from the USAspending archive.";
+const SITE = "US Public Money";
+const GA_MEASUREMENT_ID = "G-8LQL2ZYY7H";
+const DESC = "Explore a clearly labelled sample of US federal contract obligations by agency and recipient, with USAspending source dates, identifiers and calculation limits.";
 const ATTR = "Derived from USAspending.gov (U.S. Department of the Treasury, Bureau of the Fiscal Service). U.S. government work, public domain (17 U.S.C. 105). This site is not the official USAspending search and is not endorsed by Treasury or OMB.";
 
 export default {
@@ -153,8 +154,8 @@ async function home(env, request, url) {
       <section class="hero">
         <div class="wrap">
           <p class="kicker">United States · government contracts · sample</p>
-          <h1>Who gave out the money?</h1>
-          <p class="lede">See how much contract money each US government agency gave out, and which companies received it. This is a sample, not every award.</p>
+          <h1>Which agencies awarded the contract money?</h1>
+          <p class="lede">Explore observed contract obligations by agency and recipient in one dated USAspending archive sample. For live or complete federal records, <a href="https://www.usaspending.gov/">use the official USAspending search</a>.</p>
           ${shareBlock(url.origin + "/")}
           <form class="filters" action="/" method="get">
             <label>Year <select name="fy"><option value="">All years in sample</option>${years}</select></label>
@@ -523,7 +524,7 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(desc)}">
-  ${noindex ? `<meta name="robots" content="noindex,follow">` : ""}
+  <meta name="robots" content="${noindex ? "noindex,follow" : "index,follow"}">
   <link rel="canonical" href="${esc(canonical)}">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -538,6 +539,7 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
   <meta property="og:site_name" content="${esc(SITE)}">
   <meta name="twitter:card" content="summary_large_image">
   <script type="application/ld+json">${structuredData}</script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("consent","default",{analytics_storage:"denied",ad_storage:"denied",ad_user_data:"denied",ad_personalization:"denied"});function enableAnalytics(){try{localStorage.setItem("uspm-analytics","granted")}catch(e){}gtag("consent","update",{analytics_storage:"granted"});var s=document.createElement("script");s.async=true;s.src="https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}";document.head.appendChild(s);gtag("js",new Date());gtag("config","${GA_MEASUREMENT_ID}",{anonymize_ip:true})}try{if(localStorage.getItem("uspm-analytics")==="granted")enableAnalytics()}catch(e){}</script>
   <style>
     :root { --navy:#0a3161; --gold:#c5a572; --paper:#f4f1ea; --ink:#1b1b18; --muted:#5c574c; --card:#fffdf8; }
     * { box-sizing:border-box; }
@@ -563,7 +565,7 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
     button, .copy { background:var(--gold); color:var(--navy); border:0; padding:.45rem .8rem; font:inherit; cursor:pointer; }
     .grid { list-style:none; padding:0; display:grid; gap:.6rem; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); }
     .grid li { background:var(--card); padding:.75rem; border-top:4px solid var(--navy); }
-    table { width:100%; border-collapse:collapse; background:var(--card); }
+    table { display:block; width:100%; max-width:100%; overflow-x:auto; border-collapse:collapse; background:var(--card); }
     th,td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid #e4ddd0; vertical-align:top; }
     .share { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
     .share span { font-size:.75rem; letter-spacing:.08em; }
@@ -594,11 +596,15 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
   <footer>
     <div class="wrap">
       <p>${esc(ATTR)}</p>
+      <p>Owner/operator: <a href="https://37xventures.com/#contact" rel="noopener noreferrer">37X Ventures</a>.</p>
       ${shareBlock(canonical)}
-      <p><a href="/about">About</a> · <a href="/methodology">Methodology</a> · <a href="/data-sources">Data sources</a> · No /awards pages.</p>
+      <p><a href="/about">About</a> · <a href="/methodology">Methodology</a> · <a href="/data-sources">Data sources</a> · <a href="mailto:hello@uspublicmoney.com?subject=US%20Public%20Money%20correction">Report a correction</a> · No /awards pages.</p>
+      <p><button type="button" onclick="enableAnalytics()">Allow analytics</button> Analytics is optional and off by default.</p>
+      <p id="catalogue-status" aria-live="polite">Shared catalogue status: checking…</p>
     </div>
   </footer>
   <script>
+    fetch("https://atlas-open-data-ingest.rewardspy.workers.dev/public-catalog/site/uspublicmoney.com").then(r=>r.ok?r.json():Promise.reject()).then(d=>{const ids=(d.datasets||[]).map(x=>x.id),f=[];if(ids.includes("grants-gov"))f.push("dated federal opportunities");if(ids.includes("sec-edgar"))f.push("issuer identity");if(ids.includes("world-bank"))f.push("country-level context");document.getElementById("catalogue-status").textContent="Shared catalogue checked "+String(d.generatedAt).slice(0,10)+": "+(f.join(", ")||"no additional public-money layer")+" reviewed. Opportunity records are not awards or spending, and company or country context never becomes a payment claim."}).catch(()=>document.getElementById("catalogue-status").textContent="Shared catalogue unavailable; publication remains fail-closed."); 
     document.addEventListener("click", (e) => {
       const b = e.target.closest(".copy");
       if (!b) return;
@@ -612,10 +618,21 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
 }
 
 function html(s, status = 200) {
-  return new Response(s, { status, headers: { "content-type": "text/html; charset=utf-8" } });
+  return new Response(s, { status, headers: secureHeaders("text/html; charset=utf-8") });
 }
 function text(s) {
-  return new Response(s, { headers: { "content-type": "text/plain; charset=utf-8" } });
+  return new Response(s, { headers: secureHeaders("text/plain; charset=utf-8") });
+}
+function secureHeaders(contentType) {
+  return {
+    "content-type": contentType,
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://static.cloudflareinsights.com; connect-src 'self' https://atlas-open-data-ingest.rewardspy.workers.dev https://www.google-analytics.com https://*.google-analytics.com https://cloudflareinsights.com; upgrade-insecure-requests"
+  };
 }
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
