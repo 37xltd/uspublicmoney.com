@@ -2,7 +2,7 @@
  * US Federal Spending — precomputed projections only.
  */
 const SITE = "US Public Money";
-const GA_MEASUREMENT_ID = "G-8LQL2ZYY7H";
+const GA_MEASUREMENT_ID = "G-SWVLQ1LFZ7";
 const DESC = "Explore a clearly labelled sample of US federal contract obligations by agency and recipient, with USAspending source dates, identifiers and calculation limits.";
 const ATTR = "Derived from USAspending.gov (U.S. Department of the Treasury, Bureau of the Fiscal Service). U.S. government work, public domain (17 U.S.C. 105). This site is not the official USAspending search and is not endorsed by Treasury or OMB.";
 
