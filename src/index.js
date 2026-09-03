@@ -526,6 +526,10 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
       },
     ],
   }).replaceAll("<", "\\u003c");
+  const questionGuide = !noindex && path !== "/about" && path !== "/methodology" && path !== "/data-sources"
+    ? `<section class="wrap answer" aria-labelledby="page-questions"><p class="kicker">Questions this page can answer</p><h2 id="page-questions">Read the money with its boundaries intact</h2><h3>What does the amount represent?</h3><p>It is the summed federal contract obligation observed in the labelled USAspending sample and period—not a complete government-spending total.</p><h3>Who awarded and received it?</h3><p>Use agency names, recipient identifiers, fiscal year and transaction counts together; names alone can merge unrelated entities.</p><h3>Can two figures be compared?</h3><p>Only compare figures built from the same sample, period and measure, with the record count visible.</p><h3>What should I check next?</h3><p>Open USAspending for the current complete record before relying on a figure.</p></section>`
+    : "";
+  const bodyWithQuestions = questionGuide ? body.replace("</main>", `${questionGuide}</main>`) : body;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -601,7 +605,7 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
       </nav>
     </div>
   </header>
-  ${body}
+  ${bodyWithQuestions}
   <footer>
     <div class="wrap">
       <p>${esc(ATTR)}</p>
