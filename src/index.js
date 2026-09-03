@@ -102,10 +102,11 @@ function coverageNote(meta, extra) {
   meta = meta || {};
   const coverage = meta.coverage_label || "sample";
   const snapshot = meta.retrieved_utc || meta.pull_date_utc || "not available";
+  const rechecked = meta.ingest_date_utc || snapshot;
   return `<aside class="prov">
     <h2>Source, date, method</h2>
     <p><strong>Coverage status:</strong> ${esc(coverage)} — ${esc(meta.coverage || "Sample of one archive chunk. Not full-archive totals.")}</p>
-    <p><strong>Last successful snapshot:</strong> ${esc(snapshot)} UTC. Archive date: ${esc(meta.archive_date || "")}.</p>
+    <p><strong>Data collected:</strong> <time datetime="${esc(snapshot)}">${esc(snapshot)} UTC</time>. <strong>Data rechecked:</strong> <time datetime="${esc(rechecked)}">${esc(rechecked)} UTC</time>. Archive date: ${esc(meta.archive_date || "")}.</p>
     <p><strong>Freshness:</strong> held snapshot; this page does not imply live or complete national coverage.</p>
     <p><strong>Source:</strong> ${esc(meta.source || "USAspending.gov Award Data Archive")} · file ${esc(meta.file || "")} · member ${esc(meta.member || "")}.</p>
     <p><strong>Method:</strong> ${esc(meta.method || "")}</p>
