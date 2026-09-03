@@ -141,6 +141,8 @@ function recipTable(rows, extraHead, extraCell) {
 
 async function home(env, request, url) {
   const hub = (await loadJson(env, request, "/data/hub.json")) || { meta: {}, fiscal_years: [], top_agencies: [], top_recipients: [], agency_year_cells: [] };
+  const collectedAt = hub.meta?.retrieved_utc || hub.meta?.pull_date_utc || null;
+  const recheckedAt = hub.meta?.ingest_date_utc || collectedAt;
   const fy = (url.searchParams.get("fy") || "").trim();
   const agency = (url.searchParams.get("agency") || "").trim();
   let cells = hub.agency_year_cells || [];
@@ -161,6 +163,7 @@ async function home(env, request, url) {
           <p class="kicker">United States · government contracts · sample</p>
           <h1>Which agencies awarded the contract money?</h1>
           <p class="lede">Explore observed contract obligations by agency and recipient in one dated USAspending archive sample. For live or complete federal records, <a href="https://www.usaspending.gov/">use the official USAspending search</a>.</p>
+          ${collectedAt ? `<p><strong>Data last collected:</strong> <time datetime="${esc(collectedAt)}">${esc(collectedAt)} UTC</time> · <strong>Data last rechecked:</strong> <time datetime="${esc(recheckedAt)}">${esc(recheckedAt)} UTC</time></p>` : ""}
           ${shareBlock(url.origin + "/")}
           <form class="filters" action="/" method="get">
             <label>Year <select name="fy"><option value="">All years in sample</option>${years}</select></label>
