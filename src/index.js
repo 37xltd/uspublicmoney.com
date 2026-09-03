@@ -9,6 +9,11 @@ const ATTR = "Derived from USAspending.gov (U.S. Department of the Treasury, Bur
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.hostname === "www.uspublicmoney.com") {
+      url.hostname = "uspublicmoney.com";
+      url.protocol = "https:";
+      return Response.redirect(url.toString(), 301);
+    }
     const path = url.pathname.replace(/\/+$/, "") || "/";
     try {
       if (
