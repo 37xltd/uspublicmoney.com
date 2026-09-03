@@ -509,7 +509,7 @@ function layout(url, { title, desc, path, body, noindex, canonicalOverride }) {
         "@id": `${origin}/#website`,
         name: SITE,
         url: `${origin}/`,
-        description: "Independent, source-attributed views of United States federal spending.",
+        description: "Independent, source-attributed views of one clearly labelled USAspending contract-data sample; not complete national totals.",
         publisher: { "@id": `${origin}/#organization` },
       },
       {
